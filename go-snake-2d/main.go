@@ -11,7 +11,9 @@ import (
 // Ebitengine requires any game object to have three methods: Update, Draw, and Layout.
 type Game struct{}
 
-// Update is called 60 times per second (60 FPS) and is where all game logic goes.
+// Update is called 60 times per second (60 FPS) by default as the Ebiten works on the tick
+// logic and by default it operates on 60 ticks a second making it to have a 60Hz frequency 
+// of operation, and is where all game logic goes.
 // This includes handling input, updating object positions, collision detection, etc.
 // The primary job is to change the state of the game.
 // Parameters:
@@ -25,7 +27,7 @@ func (g *Game) Update() error {
 
 // Draw is responsible for rendering the current state of the game to the screen.
 // This is typically called less frequently than Update, depending on the monitor's refresh rate.
-// NOTE: Only drawing operations should happen here, not game logic updates.
+// NOTE: Only drawing operations should h`appen here, not game logic updates.
 // Parameters:
 //   - (g *Game): The receiver (the Game instance).
 //   - screen (*ebiten.Image): The main canvas (the target image) where all drawing must occur.
