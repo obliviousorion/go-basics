@@ -1,5 +1,8 @@
 # 🐍 Complete Snake Game Refactoring Guide
 
+### Visit this for some more info https://www.youtube.com/watch?v=ZpHqL5ykCyw&list=PL10piHcP2kVKr0Uokt215JmhgGEgw1dE-&index=1
+
+
 ## 📚 Table of Contents
 1. [Current Problems](#current-problems)
 2. [Refactoring Strategy](#refactoring-strategy)
