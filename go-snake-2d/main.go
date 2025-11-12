@@ -1,79 +1,211 @@
 package main
 
 import (
-	"image/color" // The standard Go package for defining colors.
-	"log"         // Used for simple error logging.
+	"bytes"
+	"image/color"
+	"log"
+	"math/rand/v2"
+	"time"
 
-	"github.com/hajimehoshi/ebiten/v2" // The core Ebitengine game library.
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
-// Game is the main struct that holds the game state and implements Ebitengine's Game interface.
-// Ebitengine requires any game object to have three methods: Update, Draw, and Layout.
-type Game struct{}
+const (
+	gameSpeed    = time.Second / 6
+	screenWidth  = 640
+	screenHeight = 480
+	gridSize     = 20
+)
 
-// Update is called 60 times per second (60 FPS) by default as the Ebiten works on the tick
-// logic and by default it operates on 60 ticks a second making it to have a 60Hz frequency 
-// of operation, and is where all game logic goes.
-// This includes handling input, updating object positions, collision detection, etc.
-// The primary job is to change the state of the game.
-// Parameters:
-//   - (g *Game): The receiver, meaning this method operates on the Game struct instance.
-// Returns:
-//   - error: Returns an error if the game loop should terminate (e.g., a critical failure).
+var (
+	dirUp           = Point{x: 0, y: -1}
+	dirDown         = Point{x: 0, y: 1}
+	dirRight        = Point{x: 1, y: 0}
+	dirLeft         = Point{x: -1, y: 0}
+	mplusFaceSource *text.GoTextFaceSource
+)
+
+type Point struct {
+	x, y int
+}
+
+type Game struct {
+	snake      []Point
+	direction  Point
+	lastUpdate time.Time
+	food       Point
+	gameOver   bool
+}
+
 func (g *Game) Update() error {
-	// Currently, this function does nothing, so we just return nil (no error).
+
+	if g.gameOver {
+		if ebiten.IsKeyPressed(ebiten.KeyEnter) || ebiten.IsKeyPressed(ebiten.KeyEscape) {
+			g.gameOver = true
+			return nil
+		}
+
+		return nil
+	}
+
+	// we need to capture the keystroke before everything or else our game might be
+	// buggy
+	if ebiten.IsKeyPressed(ebiten.KeyW) {
+		g.direction = dirUp
+	} else if ebiten.IsKeyPressed(ebiten.KeyS) {
+		g.direction = dirDown
+	} else if ebiten.IsKeyPressed(ebiten.KeyA) {
+		g.direction = dirLeft
+	} else if ebiten.IsKeyPressed(ebiten.KeyD) {
+		g.direction = dirRight
+	}
+
+	if time.Since(g.lastUpdate) < gameSpeed {
+		return nil
+	}
+	g.lastUpdate = time.Now()
+
+	g.updateSnake(&g.snake, g.direction)
 	return nil
 }
 
-// Draw is responsible for rendering the current state of the game to the screen.
-// This is typically called less frequently than Update, depending on the monitor's refresh rate.
-// NOTE: Only drawing operations should h`appen here, not game logic updates.
-// Parameters:
-//   - (g *Game): The receiver (the Game instance).
-//   - screen (*ebiten.Image): The main canvas (the target image) where all drawing must occur.
+func (g *Game) updateSnake(
+	snake *[]Point, direction Point) {
+	head := (*snake)[0]
+	newHead := Point{
+		x: head.x + direction.x,
+		y: head.y + direction.y,
+	}
+
+	if g.isBadCollision(newHead, *snake) {
+		g.gameOver = true
+		return
+	}
+
+	if newHead == g.food {
+
+		*snake = append([]Point{newHead}, *snake...,
+		)
+		g.spawnFood()
+	} else {
+		*snake = append(
+			[]Point{newHead},
+			(*snake)[:len(*snake)-1]...,
+		)
+	}
+
+}
+
+func (g *Game) isBadCollision(
+	p Point, 
+	snake []Point,
+) bool {
+	if p.x < 0 || p.y < 0 || p.x >= screenWidth/gridSize || p.y >= screenHeight/gridSize{
+		return true
+	}
+
+	for _, sp := range snake {
+		if sp == p {
+			return true
+		}
+	}
+
+	return false
+}
+
+
 func (g *Game) Draw(screen *ebiten.Image) {
-	// screen.Fill is a utility method that fills the entire 'screen' canvas with a single color.
-	// color.RGBA{R, G, B, A} defines a color using 8-bit Red, Green, Blue, and Alpha (transparency) values.
-	// 0xff in hexadecimal is 255 in decimal.
-	// color.RGBA{0xff, 0, 0, 0xff} sets the color to:
-	// R: 255 (Full Red)
-	// G: 0   (No Green)
-	// B: 0   (No Blue)
-	// A: 255 (Fully Opaque)
-	screen.Fill(color.RGBA{0xff, 0, 0, 0xff}) // This fills the window with solid RED.
+	for _, p := range g.snake {
+		vector.FillRect(screen,
+			float32(p.x*gridSize),
+			float32(p.y*gridSize),
+			gridSize,
+			gridSize,
+			color.White,
+			true,
+		)
+	}
+
+	vector.FillRect(screen,
+		float32(g.food.x*gridSize),
+		float32(g.food.y*gridSize),
+		gridSize,
+		gridSize,
+		color.RGBA{255, 0, 0, 0},
+		true,
+	)
+
+	if g.gameOver {
+		face := &text.GoTextFace{
+			Source: mplusFaceSource,
+			Size:   48,
+		}
+
+		w,h := text.Measure("Game Over!",
+	face, 
+	face.Size,
+	)
+
+		op := &text.DrawOptions{}
+		op.GeoM.Translate(screenWidth/2 - w/2, screenHeight/2 - h/2)
+		op.ColorScale.ScaleWithColor(color.White)
+
+		text.Draw(
+				screen,
+				"Game Over",
+				face,
+				op,
+			)
+	}
 }
 
-// Layout determines the virtual (logical) screen size of the game, independent of the window size.
-// Ebitengine automatically scales the virtual screen to fit the physical window/monitor size.
-// Parameters:
-//   - (g *Game): The receiver (the Game instance).
-//   - outsideWidth (int): The physical width of the window/monitor in pixels.
-//   - outsideHeight (int): The physical height of the window/monitor in pixels.
-// Returns:
-//   - screenWidth (int): The logical game width. Coordinates (0, 0) to (screenWidth-1, screenHeight-1) are used for drawing.
-//   - screenHeight (int): The logical game height.
-func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	// We set the logical game resolution to 320x240.
-	// If the physical window is 640x480, the game will be scaled up 2x (320*2 = 640, 240*2 = 480).
-	return 320, 240
+func (g *Game) Layout(
+	outsideWidth,
+	outsideHeight int,
+) (int, int) {
+	return screenWidth, screenHeight
 }
 
-// main is the entry point of the Go program.
+func (g *Game) spawnFood() {
+	g.food = Point{rand.IntN(screenWidth / gridSize),
+		rand.IntN(screenHeight / gridSize),
+	}
+}
+
 func main() {
-	// SetWindowSize sets the physical dimensions of the window that opens on the screen.
-	// Parameters:
-	//   - 640 (int): The width of the physical window in pixels.
-	//   - 480 (int): The height of the physical window in pixels.
-	ebiten.SetWindowSize(640, 480)
 
-	// SetWindowTitle sets the text that appears in the window's title bar.
-	ebiten.SetWindowTitle("fill")
+	s, err := text.NewGoTextFaceSource(
+		bytes.NewReader(
+			fonts.MPlus1pRegular_ttf,
+		),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mplusFaceSource = s
 
-	// RunGame starts the main game loop, passing in our custom Game struct implementation.
-	// This function blocks until the game window is closed.
-	// It returns an error if the game loop fails to start or encounters a critical runtime issue.
-	if err := ebiten.RunGame(&Game{}); err != nil {
-		// If an error is returned, log.Fatal prints the error message and terminates the program immediately.
+	g := &Game{
+		snake: []Point{{
+			x: screenWidth / gridSize / 2,
+			y: screenHeight / gridSize / 2,
+		},
+			{
+				x: screenWidth/gridSize/2 - 1,
+				y: screenHeight/gridSize/2 - 1,
+			},
+		},
+		direction: Point{x: 1, y: 0},
+	}
+
+	g.spawnFood()
+
+	ebiten.SetWindowSize(screenWidth, screenHeight)
+	ebiten.SetWindowTitle("snake")
+
+	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
 }
